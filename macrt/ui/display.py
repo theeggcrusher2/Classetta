@@ -76,6 +76,8 @@ class DisplayConfig:
     disks: list = field(default_factory=list)    # disk images in the drives, in order
     sound: bool = False                          # play the Mac's sound on the host's output
     record_sound: str | None = None              # and write it to this WAV file
+    scripted: bool = False                       # driven by --script: alerts go to the log,
+                                                 # so a run never waits on one to be closed
 
     def __post_init__(self):
         if self.host not in HOSTS:
@@ -378,8 +380,14 @@ class Display(QObject):
 
     def show_alert(self, icon: QMessageBox.Icon, title: str, text: str,
                    detail: str = "") -> None:
-        """A host alert that leaves the applications running."""
+        """A host alert that leaves the applications running.  With a
+        script driving the apps, there may be no one to click it: the
+        alert goes to the log instead, and nothing waits on it."""
         if self._shut_down:
+            return
+        if self.config.scripted:
+            print(f"macrt: {title}: {text}" + (f"\n{detail}" if detail else ""),
+                  file=sys.stderr)
             return
         box = QMessageBox(icon, title, text, QMessageBox.StandardButton.Ok, self.host_window)
         if detail:
