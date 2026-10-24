@@ -276,16 +276,19 @@ class Display(QObject):
 
     def launch(self, name: str, main: GuestMain | None, app: MacFile | None = None,
                folder: Folder | None = None, trace: bool = False,
+               trace_suppress: tuple[str, ...] = (),
                page_option: int = 0) -> Process:
         """Start a guest.  app is its application file, if it has one: the
         resource file GetNewWindow, GetMenu and friends read from.  With
-        no Python main, app's own 68k code runs; trace logs its traps.
+        no Python main, app's own 68k code runs; trace logs its traps,
+        except those named in trace_suppress.
         page_option is Launch's, for CurPageOption."""
         proc = Process(self.system, name, main,
                        EventQueue(lambda: (self.input.mac_pos, self.input.modifiers)),
                        app=app, folder=folder, page_option=page_option)
         if proc.runner is not None:
             proc.runner.trace = trace
+            proc.runner.trace_suppress = trace_suppress
         self.launch_order.append(proc)
         self.processes.append(proc)
         self.switch_to(proc)

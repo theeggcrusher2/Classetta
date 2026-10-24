@@ -297,6 +297,9 @@ def parse_args(argv=None):
                          "resources instead of running its code")
     ap.add_argument("--trace-traps", action="store_true",
                     help="log every Toolbox and OS trap the application calls")
+    ap.add_argument("--suppress-traps", metavar="NAMES", default="",
+                    help="comma-separated trap names --trace-traps shouldn't log "
+                         "(e.g. TickCount,Random)")
     ap.add_argument("--system", metavar="FILE",
                     help="a real System file, or a disk image holding one, in place of the "
                          "built-in empty one")
@@ -408,7 +411,10 @@ def main(argv=None) -> int:
         try:
             for f, view in targets:
                 display.launch(f.name, viewer_main if view else None, app=f,
-                               trace=args.trace_traps)
+                               trace=args.trace_traps,
+                               trace_suppress=tuple(
+                                   n.strip() for n in args.suppress_traps.split(",")
+                                   if n.strip()))
         except (MemoryError, ValueError) as e:
             display.shutdown(quit_app=False)
             print(f"macrt: {e}", file=sys.stderr)
