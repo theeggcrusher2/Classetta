@@ -628,6 +628,16 @@ class Toolbox:
             return int(self._gui(self._d.track_menu, self._p, pt) or 0)
         return int(self._d.bridge.call(self._d.track_menu, self._p, pt, serve=opening) or 0)
 
+    def PopUpMenuSelect(self, menu: MenuInfo | None, top: int, left: int,
+                        item: int) -> int:
+        """The menu's chosen item at (top, left), highlighted there.  See
+        macrt.ui.menubar.PopUpTracker for what the Mac's Menu Manager does
+        with them: the answer is (menu ID << 16) | item, or 0 for nothing."""
+        if menu is None:
+            return 0
+        return int(self._d.bridge.call(self._d.track_popup, self._p, menu,
+                                       top, left, item) or 0)
+
     def MenuKey(self, ch: str | int) -> int:
         if isinstance(ch, int):
             ch = bytes([ch & 0xFF]).decode("mac_roman")

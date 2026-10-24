@@ -5,7 +5,8 @@ A MenuBarWidget shows one process's menus.  Where it lives depends on the
 display's `menu_bar` setting: one shared bar for the front app ("global"),
 or one bar under each window's title bar ("window").  Neither the bar nor
 the pull-downs act on a click.  The guest gets a mouseDown, calls FindWindow,
-then MenuSelect, and MenuTracker answers that call.
+then MenuSelect, and MenuTracker answers that call.  PopUpMenuSelect is
+answered by PopUpTracker, which pulls a menu down at a caller-given point.
 """
 
 from __future__ import annotations
@@ -504,6 +505,126 @@ class MenuTracker:
             self.pulldown = None
         if result == 0:
             self.bar.set_hilite(0)
+        self.display.tracker_finished(self)
+        if not self.future.done():
+            self.future.set_result(result)
+
+
+class PopUpTracker:
+    """Answers one PopUpMenuSelect call: a menu pulled down wherever the
+    caller says, tracking the mouse until it's released.
+
+    As the Menu Manager's does: the chosen item's top goes at `top`, the
+    menu's left at `left`, and the item is highlighted there.  The menu
+    is clamped so it stays on the Mac screen, sliding off `top` as far
+    as it must.  Nothing is chosen -- and the call answers 0 -- if the
+    button is already up when it starts, if the release lands on
+    nothing, or if the highlighted item is a submenu.  (Hierarchical
+    submenus don't open under this tracker.)
+    """
+
+    ITEM_HEIGHT = theme.MENU_ITEM_HEIGHT      # the MDEF places items on this grid
+
+    def __init__(self, display: Display, menu: Menu, future: Future,
+                 top: int, left: int, item: int, strike: Strike | None = None):
+        self.display = display
+        self.menu = menu
+        self.future = future
+        self.strike = strike
+        self.top, self.left, self.item = top, left, item
+        self.pulldown: Pulldown | None = None
+        self.hilite = 0
+        self.blinking = False
+        self.done = False
+
+    # -- tracker protocol (called by Display's input router) ---------------
+    def start(self) -> None:
+        # The Menu Manager answers 0 without drawing if the button isn't
+        # held down any more when the call runs.
+        if not self.display.input.down:
+            self._finish(0)
+            return
+        pd = Pulldown(self.menu, self.display.host_window, self.strike)
+        self.pulldown = self._place(pd)
+        self.pulldown.show()
+        self.set_hilite(self._item_at(self.display.input.global_pos))
+
+    def move(self, gpos: QPoint) -> None:
+        if self.blinking:
+            return
+        self.set_hilite(self._item_at(gpos))
+
+    def press(self, gpos: QPoint) -> None:
+        pass                                # the button's already down
+
+    def release(self, gpos: QPoint) -> None:
+        if self.blinking or self.done:
+            return
+        item = self._item_at(gpos)
+        if not item:
+            self._finish(0)
+        else:
+            self._choose(item)
+
+    def cancel(self) -> None:
+        self._finish(0)
+
+    # -- internals ----------------------------------------------------------
+    def _place(self, pd: Pulldown) -> Pulldown:
+        """The menu's Mac-global origin, clamped to the screen as the
+        MDEF's msg #3 has it.  The caller passes the current item plus
+        one (Inside Macintosh's count), so the item to bring to (top,
+        left) is the one before it -- the menu's top, for 0 or 1."""
+        anchor = max(self.item - 2, 0) * self.ITEM_HEIGHT
+        screen = self.display.screen_bounds
+        items_h = len(self.menu.items) * self.ITEM_HEIGHT
+        top = min(self.top - anchor, screen.bottom - items_h)
+        left = min(self.left, max(screen.right - pd.width() + theme.MENU_SHADOW, screen.left))
+        g = self.display.global_from_mac(Point(max(top, screen.top), max(left, 0)))
+        pd.move(g)
+        return pd
+
+    def _item_at(self, gpos: QPoint) -> int:
+        if self.pulldown is None or not self.pulldown.geometry().contains(gpos):
+            return 0
+        return self.pulldown.selectable_at(self.pulldown.mapFromGlobal(gpos))
+
+    def set_hilite(self, index: int) -> None:
+        if self.pulldown is not None and index != self.hilite:
+            self.hilite = index
+            self.pulldown.set_hilite(index)
+
+    def _choose(self, item: int) -> None:
+        self.blinking = True
+        steps = theme.MENU_BLINKS * 2
+        timer = QTimer(self.pulldown)
+        state = {"n": 0}
+
+        def tick():
+            state["n"] += 1
+            if self.pulldown is None or state["n"] > steps:
+                timer.stop()
+                self._chosen(item)
+                return
+            self.pulldown.set_hilite(0 if state["n"] % 2 else item)
+
+        timer.timeout.connect(tick)
+        timer.start(theme.MENU_BLINK_MS)
+
+    def _chosen(self, item: int) -> None:
+        it = self.menu.item(item)
+        # The Menu Manager hands back nothing for a hierarchical item.
+        self._finish(0 if it is not None and it.submenu
+                     else (self.menu.id & 0xFFFF) << 16 | item)
+
+    def _finish(self, result: int) -> None:
+        if self.done:
+            return
+        self.done = True
+        if self.pulldown is not None:
+            self.pulldown.hide()
+            self.pulldown.deleteLater()
+            self.pulldown = None
         self.display.tracker_finished(self)
         if not self.future.done():
             self.future.set_result(result)

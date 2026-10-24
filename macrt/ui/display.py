@@ -55,7 +55,7 @@ from ..toolbox.windows import WindowRecord, describe_proc
 from . import chrome, theme
 from .bridge import GuiBridge
 from .keymap import key_message, modifiers_from_qt
-from .menubar import MenuBarWidget, MenuTracker
+from .menubar import MenuBarWidget, MenuTracker, PopUpTracker
 from .tracking import BoxTracker, DragTracker, GrowTracker, Tracker
 from .window import AppBarWindow, MacWindowView
 
@@ -206,7 +206,7 @@ class Display(QObject):
         self.launch_order: list[Process] = []
         self.views: dict[WindowRecord, MacWindowView] = {}
         self.app_bars: dict[Process, AppBarWindow] = {}
-        self.tracker: Tracker | MenuTracker | None = None
+        self.tracker: Tracker | MenuTracker | PopUpTracker | None = None
         self.body_font = theme.body_font()
         self._swallow_release = False
         self._last_clicked: QWidget | None = None
@@ -702,6 +702,14 @@ class Display(QObject):
         proc.last_bar = bar
         return self._start_tracker(MenuTracker(self, bar, Future(), self.config.sticky_menus,
                                                ask))
+
+    def track_popup(self, proc: Process, menu, top: int, left: int, item: int) -> Future | int:
+        """PopUpMenuSelect's menu, pulled down with the chosen item's top
+        at (top, left) in Mac global coordinates."""
+        if menu is None:
+            return 0
+        return self._start_tracker(PopUpTracker(self, menu, Future(), top, left, item,
+                                                getattr(proc, "system_strike", None)))
 
     def _drag_limit(self, bounds: Rect | None) -> Rect:
         screen = self.screen_bounds

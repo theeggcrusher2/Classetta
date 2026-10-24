@@ -279,6 +279,53 @@ def test_disabled_item_returns_zero(harness):
     assert app.last("MenuSelect") == ("MenuSelect", 0)
 
 
+def _popup(h, top=80, left=80, item=1):
+    app = Recorder("Popper", popup=True)
+    proc = h.launch(app)
+    app.popup_args = (top, left, item)
+    w = proc.windows[0]
+    h.press(w.content.left + 30, w.content.top + 30)
+    h.wait_until(lambda: QApplication.activePopupWidget() is not None, what="popup")
+    return app, proc
+
+
+def test_popup_drag_release_selects_item(harness):
+    h = harness()
+    app, proc = _popup(h)
+    h.move(*h.item_point(2))                     # Two
+    h.release(*h.item_point(2))
+    h.wait_until(lambda: app.last("PopUpMenuSelect") is not None)
+    assert app.last("PopUpMenuSelect") == ("PopUpMenuSelect",
+                                           (Recorder.POPUP << 16) | 2)
+
+
+def test_popup_off_the_bar_still_reports_the_item(harness):
+    h = harness()
+    app, proc = _popup(h)                        # nothing under the mouse
+    h.release(*h.item_point(1))
+    h.wait_until(lambda: app.last("PopUpMenuSelect") is not None)
+    assert app.last("PopUpMenuSelect") == ("PopUpMenuSelect",
+                                           (Recorder.POPUP << 16) | 1)
+
+
+def test_popup_released_outside_returns_zero(harness):
+    h = harness()
+    app, proc = _popup(h)
+    h.release(10, 400)                           # off the menu
+    h.wait_until(lambda: app.last("PopUpMenuSelect") is not None)
+    assert app.last("PopUpMenuSelect") == ("PopUpMenuSelect", 0)
+    assert QApplication.activePopupWidget() is None
+
+
+def test_popup_positions_item_top_at_top(harness):
+    h = harness()
+    app, proc = _popup(h, top=120, left=150, item=2)
+    pop = QApplication.activePopupWidget()
+    h.wait_until(lambda: pop.hilite == 2)
+    top, _ = h.mac(pop, pop.item_rect(2).topLeft())
+    assert abs(top - 120) <= 2
+
+
 def test_command_key_goes_through_menu_key(harness):
     h = harness()
     app = Recorder("App")
