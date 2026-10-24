@@ -101,6 +101,7 @@ JShowCursor = 0x804
 JShieldCursor = 0x808
 JInitCrsr = 0x814
 JCrsrObscure = 0x81C
+JCrsrTask = 0x8EE       # QuickDraw's cursor VBL task, for VBL tasks that chain to it
 ScrnBase = 0x824        # the screen buffer
 MTemp = 0x828           # where the mouse is, as the hardware has it
 RawMouse = 0x82C

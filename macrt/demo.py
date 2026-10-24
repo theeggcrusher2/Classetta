@@ -25,6 +25,7 @@ import argparse
 import logging
 import signal
 import sys
+import threading
 import time
 
 from PyQt6.QtCore import QTimer
@@ -296,9 +297,17 @@ def parse_args(argv=None):
                          "resources instead of running its code")
     ap.add_argument("--trace-traps", action="store_true",
                     help="log every Toolbox and OS trap the application calls")
+    ap.add_argument("--suppress-traps", metavar="NAMES", default="",
+                    help="comma-separated trap names --trace-traps shouldn't log "
+                         "(e.g. TickCount,Random)")
     ap.add_argument("--system", metavar="FILE",
                     help="a real System file, or a disk image holding one, in place of the "
                          "built-in empty one")
+    ap.add_argument("--script", metavar="FILE",
+                    help="a Python file run against the running display, to drive the "
+                         "applications with synthetic keys and clicks")
+    ap.add_argument("--quit-when-done", action="store_true",
+                    help="with --script, shut down once the script returns")
     return ap.parse_args(argv)
 
 
@@ -342,6 +351,32 @@ def _why_no_code(f) -> str:
     return "no CODE resources"
 
 
+def _run_script(display, path: str, quit_when_done: bool = False) -> None:
+    """Run a Python file on its own thread, with `macrt` (the Controller)
+    and `display` in its globals.  The GUI thread stays free to draw and
+    answer traps while the script sleeps and waits."""
+    import traceback
+
+    from .ui.automation import Controller
+
+    controller = Controller(display)
+
+    def run():
+        try:
+            with open(path) as f:
+                source = f.read()
+            exec(compile(source, path, "exec"),
+                 {"macrt": controller, "display": display, "__name__": "__script__"})
+        except BaseException:  # noqa: BLE001 - reported, not propagated
+            traceback.print_exc()
+        finally:
+            if quit_when_done:
+                display.shutdown()
+
+    t = threading.Thread(target=run, name="script", daemon=True)
+    t.start()
+
+
 def main(argv=None) -> int:
     args = parse_args(argv)
     targets, disks = [], []
@@ -367,7 +402,8 @@ def main(argv=None) -> int:
                                     sticky_menus=not args.classic_menus,
                                     system_file=system_file, speed=args.speed,
                                     model=args.model, disks=disks,
-                                    sound=not args.no_sound, record_sound=args.record_sound))
+                                    sound=not args.no_sound, record_sound=args.record_sound,
+                                    scripted=bool(args.script)))
     display.show()
     if targets:
         logging.basicConfig(format="macrt: %(message)s")
@@ -375,7 +411,10 @@ def main(argv=None) -> int:
         try:
             for f, view in targets:
                 display.launch(f.name, viewer_main if view else None, app=f,
-                               trace=args.trace_traps)
+                               trace=args.trace_traps,
+                               trace_suppress=tuple(
+                                   n.strip() for n in args.suppress_traps.split(",")
+                                   if n.strip()))
         except (MemoryError, ValueError) as e:
             display.shutdown(quit_app=False)
             print(f"macrt: {e}", file=sys.stderr)
@@ -384,6 +423,8 @@ def main(argv=None) -> int:
         display.launch("Sampler", sampler_main)
         if not args.single:
             display.launch("Ticker", ticker_main)
+    if args.script:
+        _run_script(display, args.script, quit_when_done=args.quit_when_done)
     signal.signal(signal.SIGINT, lambda *_: display.shutdown())
     heartbeat = QTimer(interval=200)      # lets Python see Ctrl+C
     heartbeat.timeout.connect(lambda: None)

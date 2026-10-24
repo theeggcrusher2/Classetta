@@ -114,3 +114,10 @@ def SndDisposeChannel(t, chan, quiet_now):
         return badChannel
     t.machine.sound_manager.dispose(t, ch, bool(quiet_now))
     return noErr
+
+
+@trap
+def SndPlayDoubleBuffer(t, chan, the_params):
+    """Stub: double-buffered playback isn't implemented, so the app gets
+    noErr and the sound is simply never heard."""
+    return noErr

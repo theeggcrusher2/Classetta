@@ -1629,6 +1629,16 @@ def MenuSelect(t, pt):
     return glue_desk.menu_picked(t, result)
 
 
+@trap
+def PopUpMenuSelect(t, h, top, left, item):
+    """The menu the caller drew a pop-up box for, pulled down at (top,
+    left) with item's top highlighted there: (menu ID << 16) | chosen
+    item, 0 for nothing.  The host draws it, so the app's MBDF doesn't
+    hear about it; the caller marks and stores the choice itself."""
+    with t.yielding():
+        return t.tb.PopUpMenuSelect(t.menu(h), top, left, item)
+
+
 def _restore_menu(t, shown: list[int]) -> None:
     if shown:
         shown.clear()

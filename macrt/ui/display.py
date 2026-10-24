@@ -55,7 +55,7 @@ from ..toolbox.windows import WindowRecord, describe_proc
 from . import chrome, theme
 from .bridge import GuiBridge
 from .keymap import key_message, modifiers_from_qt
-from .menubar import MenuBarWidget, MenuTracker
+from .menubar import MenuBarWidget, MenuTracker, PopUpTracker
 from .tracking import BoxTracker, DragTracker, GrowTracker, Tracker
 from .window import AppBarWindow, MacWindowView
 
@@ -76,6 +76,8 @@ class DisplayConfig:
     disks: list = field(default_factory=list)    # disk images in the drives, in order
     sound: bool = False                          # play the Mac's sound on the host's output
     record_sound: str | None = None              # and write it to this WAV file
+    scripted: bool = False                       # driven by --script: alerts go to the log,
+                                                 # so a run never waits on one to be closed
 
     def __post_init__(self):
         if self.host not in HOSTS:
@@ -204,7 +206,7 @@ class Display(QObject):
         self.launch_order: list[Process] = []
         self.views: dict[WindowRecord, MacWindowView] = {}
         self.app_bars: dict[Process, AppBarWindow] = {}
-        self.tracker: Tracker | MenuTracker | None = None
+        self.tracker: Tracker | MenuTracker | PopUpTracker | None = None
         self.body_font = theme.body_font()
         self._swallow_release = False
         self._last_clicked: QWidget | None = None
@@ -274,16 +276,19 @@ class Display(QObject):
 
     def launch(self, name: str, main: GuestMain | None, app: MacFile | None = None,
                folder: Folder | None = None, trace: bool = False,
+               trace_suppress: tuple[str, ...] = (),
                page_option: int = 0) -> Process:
         """Start a guest.  app is its application file, if it has one: the
         resource file GetNewWindow, GetMenu and friends read from.  With
-        no Python main, app's own 68k code runs; trace logs its traps.
+        no Python main, app's own 68k code runs; trace logs its traps,
+        except those named in trace_suppress.
         page_option is Launch's, for CurPageOption."""
         proc = Process(self.system, name, main,
                        EventQueue(lambda: (self.input.mac_pos, self.input.modifiers)),
                        app=app, folder=folder, page_option=page_option)
         if proc.runner is not None:
             proc.runner.trace = trace
+            proc.runner.trace_suppress = trace_suppress
         self.launch_order.append(proc)
         self.processes.append(proc)
         self.switch_to(proc)
@@ -378,8 +383,14 @@ class Display(QObject):
 
     def show_alert(self, icon: QMessageBox.Icon, title: str, text: str,
                    detail: str = "") -> None:
-        """A host alert that leaves the applications running."""
+        """A host alert that leaves the applications running.  With a
+        script driving the apps, there may be no one to click it: the
+        alert goes to the log instead, and nothing waits on it."""
         if self._shut_down:
+            return
+        if self.config.scripted:
+            print(f"macrt: {title}: {text}" + (f"\n{detail}" if detail else ""),
+                  file=sys.stderr)
             return
         box = QMessageBox(icon, title, text, QMessageBox.StandardButton.Ok, self.host_window)
         if detail:
@@ -691,6 +702,14 @@ class Display(QObject):
         proc.last_bar = bar
         return self._start_tracker(MenuTracker(self, bar, Future(), self.config.sticky_menus,
                                                ask))
+
+    def track_popup(self, proc: Process, menu, top: int, left: int, item: int) -> Future | int:
+        """PopUpMenuSelect's menu, pulled down with the chosen item's top
+        at (top, left) in Mac global coordinates."""
+        if menu is None:
+            return 0
+        return self._start_tracker(PopUpTracker(self, menu, Future(), top, left, item,
+                                                getattr(proc, "system_strike", None)))
 
     def _drag_limit(self, bounds: Rect | None) -> Rect:
         screen = self.screen_bounds

@@ -466,6 +466,17 @@ def trap_address(t, key: int) -> int:
 
 
 @trap
+def SwapMMUMode(t, mode):
+    """The addressing-mode flip QuickDraw and some games bracket graphics
+    calls with.  macrt's memory is 24-bit and its drawing is the host's,
+    so there's nothing to switch; keep MMU32Bit telling the truth and
+    hand back the previous mode in D0.B, as the trap does."""
+    prev = t.mem.r8(lowmem.MMU32Bit)
+    t.mem.w8(lowmem.MMU32Bit, mode & 0xFF)
+    return 0, prev
+
+
+@trap
 def GetTrapAddress(t, num, new, toolbox):
     return trap_address(t, _trap_key(num, new, toolbox))
 

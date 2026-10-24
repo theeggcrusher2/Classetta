@@ -328,6 +328,7 @@ class Machine:
         self.wait_for_io = ROM_BASE + 116
         self.io_done = ROM_BASE + 130       # JIODone's: glue_devices does it
         self.cursor_vectors = ROM_BASE + 132
+        self.cursor_task = ROM_BASE + 502   # JCrsrTask's: an RTS, the cursor's the host's
         self.data_marks = ROM_BASE + 184    # what begins and ends a sector's data field
         self.rd_data = ROM_BASE + 190       # the ROM's RdData: glue_sony does it
         self.te_do_text = ROM_BASE + 192    # TextEdit's DoText: glue_textedit does it
@@ -357,6 +358,8 @@ class Machine:
         mem.write(self.wait_for_io, WAIT_FOR_IO)
         mem.write(self.sound_wait, SOUND_WAIT)
         mem.w16(self.io_done, ILLEGAL_WORD)
+        mem.w16(self.cursor_task, RTS)
+        mem.w32(lowmem.JCrsrTask, self.cursor_task)
         mem.w16(self.rd_data, ILLEGAL_WORD)
         mem.w16(self.rd_addr, ILLEGAL_WORD)
         mem.w16(self.adr_disk, ILLEGAL_WORD)
@@ -580,6 +583,7 @@ class Runner:
         self.unimplemented_calls: collections.Counter = collections.Counter()
         self.temp_handles: set[int] = set()         # TempNewHandle's, in the system heap
         self.trace = False
+        self.trace_suppress = ()    # trap names --trace-traps doesn't log
         self.menu_rect = 0          # mbRect's answer while MenuSelect pulls a menu down
         self.retrace_tick = 0       # when its VBL tasks were last counted down
         self.null_tick = -1         # when GetNextEvent last had nothing for it
@@ -828,7 +832,9 @@ class Runner:
         self.history.append((word, pc))
         self.screen.tick()          # show what it's written in the screen buffer
         if self.trace:
-            log.debug("%s: %s at $%06X", self.process.name, dispatch.describe(self, word), pc)
+            name = dispatch.describe(self, word)
+            if name not in self.trace_suppress:
+                log.debug("%s: %s at $%06X", self.process.name, name, pc)
         start, end = self.machine.stubs
         via_stub = start <= (pc & ADDRESS_MASK) < end
         if pc & ADDRESS_MASK == self.machine.return_stub:

@@ -49,12 +49,16 @@ class Recorder:
     usual event loop and logs every Toolbox answer it gets in `log`."""
 
     FILE, EDIT = 129, 130
+    POPUP = 131
 
-    def __init__(self, name, *, windows=1, proc_id=k.zoomDocProc, at=(40, 60)):
+    def __init__(self, name, *, windows=1, proc_id=k.zoomDocProc, at=(40, 60),
+                 popup=False):
         self.name = name
         self.n_windows = windows
         self.proc_id = proc_id
         self.at = at
+        self.popup = popup
+        self.popup_args = (80, 80, 1)      # PopUpMenuSelect's top, left, item
         self.log = []
         self.events = []
         self.ready = threading.Event()
@@ -68,6 +72,9 @@ class Recorder:
         tb.AppendMenu(edit, "(Undo/Z;Cut/X;Copy/C")
         tb.InsertMenu(file, 0)
         tb.InsertMenu(edit, 0)
+        if self.popup:
+            self.popup_menu = tb.NewMenu(self.POPUP, "Pop")
+            tb.AppendMenu(self.popup_menu, "One;Two;Three")
         tb.DrawMenuBar()
         for i in range(self.n_windows):
             self.new_window()
@@ -93,6 +100,10 @@ class Recorder:
             self.log.append(("FindWindow", part, win))
             if part == k.inMenuBar:
                 return self.menu(tb.MenuSelect(ev.where))
+            if part == k.inContent and self.popup:
+                top, left, item = self.popup_args
+                result = tb.PopUpMenuSelect(self.popup_menu, top, left, item)
+                self.log.append(("PopUpMenuSelect", result))
             if part == k.inGoAway:
                 ok = tb.TrackGoAway(win, ev.where)
                 self.log.append(("TrackGoAway", ok))

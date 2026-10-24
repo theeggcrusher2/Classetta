@@ -77,6 +77,11 @@ EXTRA_FUNCTIONS = {
     "HiliteText": (0xA8B5, "ScriptUtil", 0x800E001C, "phhhp", "", (), None, ""),
     # LowercaseText and the rest push the routine's word last.
     "TextUtilFunctions": (0xA8B5, "ScriptUtil", 0x800AFFB6, "phhh", "", (), None, ""),
+    # The generated table keys this under the C header's full 32-bit selector
+    # ($04200008), but SoundDispatch is dispatched on the low 24 bits of D0, so
+    # a Pascal Traps.a caller (MOVE.L #$00200008,D0) looks up $200008 and misses.
+    # Re-key it under the masked value; both encodings mask to the same thing.
+    "SndPlayDoubleBuffer": (0xA800, "SoundDispatch", 0x200008, "pp", "e", (), None, ""),
 }
 STD_FILTER_SELECTOR = 0x067F
 EXTRA_NAMES = {0xA02F: "PostEvent", 0xA89F: "Unimplemented", 0xA9F2: "Launch",
