@@ -328,6 +328,7 @@ class Machine:
         self.wait_for_io = ROM_BASE + 116
         self.io_done = ROM_BASE + 130       # JIODone's: glue_devices does it
         self.cursor_vectors = ROM_BASE + 132
+        self.cursor_task = ROM_BASE + 502   # JCrsrTask's: an RTS, the cursor's the host's
         self.data_marks = ROM_BASE + 184    # what begins and ends a sector's data field
         self.rd_data = ROM_BASE + 190       # the ROM's RdData: glue_sony does it
         self.te_do_text = ROM_BASE + 192    # TextEdit's DoText: glue_textedit does it
@@ -357,6 +358,8 @@ class Machine:
         mem.write(self.wait_for_io, WAIT_FOR_IO)
         mem.write(self.sound_wait, SOUND_WAIT)
         mem.w16(self.io_done, ILLEGAL_WORD)
+        mem.w16(self.cursor_task, RTS)
+        mem.w32(lowmem.JCrsrTask, self.cursor_task)
         mem.w16(self.rd_data, ILLEGAL_WORD)
         mem.w16(self.rd_addr, ILLEGAL_WORD)
         mem.w16(self.adr_disk, ILLEGAL_WORD)
