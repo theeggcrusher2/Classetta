@@ -3,6 +3,7 @@
 A runtime for classic Mac OS (System 1–7) applications with a PyQt6 front end.  CURRENTLY VERY EARLY AND EXPERIMENTAL!
 
 __ANNOUNCEMENT: A new Classetta-weekly repo is now available!  You can go here: https://github.com/theeggcrusher2/Classetta-weekly__  
+__ANNOUNCEMENT: To provide a unified communication channel for Classetta, a new Discord server was made!  Access here: https://discord.gg/f6NF7yhWjF__
 
 Classetta runs an application's own 68k code on an emulated CPU, catches its
 A-line traps, and answers them with a Toolbox written in Python, with Qt
